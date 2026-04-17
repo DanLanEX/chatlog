@@ -1,0 +1,41 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - '**'
+    tags-ignore:
+      - 'v*'
+  pull_request:
+
+jobs:
+  build:
+    name: Build and Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        run: |
+          CGO_ENABLED=1 \
+          CGO_CFLAGS="-I$(pwd)/include" \
+          CGO_LDFLAGS="-L$(pwd)/library" \
+          go build -trimpath \
+            -ldflags "-s -w -X github.com/sjzar/chatlog/pkg/version.Version=$(git describe --tags --always --dirty=-dev)" \
+            --tags "fts5" \
+            -o bin/chatlog \
+            main.go
+
+      - name: Test
+        run: |
+          CGO_ENABLED=1 \
+          CGO_CFLAGS="-I$(pwd)/include" \
+          CGO_LDFLAGS="-L$(pwd)/library" \
+          go test ./... -cover
