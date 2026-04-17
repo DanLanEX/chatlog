@@ -1,0 +1,64 @@
+name: Build Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g. v0.1.0). Leave empty to use git describe.'
+        required: false
+        default: ''
+
+jobs:
+  build-windows:
+    name: Build Windows amd64
+    runs-on: ubuntu-latest
+    container:
+      image: goreleaser/goreleaser-cross:v1.24
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fix git permissions
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Set version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
+          else
+            echo "VERSION=$(git describe --tags --always --dirty='-dev')" >> $GITHUB_ENV
+          fi
+
+      - name: Build Windows amd64
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: "1"
+          CC: x86_64-w64-mingw32-gcc
+          CXX: x86_64-w64-mingw32-g++
+          CGO_CFLAGS: "-I${{ github.workspace }}/include"
+          CGO_LDFLAGS: >-
+            -L${{ github.workspace }}/library -lgomp
+            -Wl,--defsym,_ZNKSt25__codecvt_utf8_utf16_baseIwE5do_inER9_MbstatetPKcS4_RS4_PwS6_RS6_=_ZNKSt25__codecvt_utf8_utf16_baseIwE5do_inERiPKcS3_RS3_PwS5_RS5_
+            -Wl,--defsym,_ZNKSt25__codecvt_utf8_utf16_baseIwE6do_outER9_MbstatetPKwS4_RS4_PcS6_RS6_=_ZNKSt25__codecvt_utf8_utf16_baseIwE6do_outERiPKwS3_RS3_PcS5_RS5_
+            -Wl,--defsym,_ZNKSt25__codecvt_utf8_utf16_baseIwE10do_unshiftER9_MbstatetPcS3_RS3_=_ZNKSt25__codecvt_utf8_utf16_baseIwE10do_unshiftERiPcS2_RS2_
+            -Wl,--defsym,_ZNKSt25__codecvt_utf8_utf16_baseIwE9do_lengthER9_MbstatetPKcS4_y=_ZNKSt25__codecvt_utf8_utf16_baseIwE9do_lengthERiPKcS3_y
+            -Wl,--defsym,_ZNSt7codecvtIwc9_MbstatetEC2Ey=_ZNSt7codecvtIwciEC1Ey
+        run: |
+          mkdir -p bin
+          go build -trimpath \
+            -ldflags "-X github.com/sjzar/chatlog/pkg/version.Version=${VERSION} -w -s" \
+            --tags fts5 \
+            -o bin/chatlog_windows_amd64.exe \
+            main.go
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chatlog_windows_amd64
+          path: bin/chatlog_windows_amd64.exe
+          retention-days: 30
